@@ -1,5 +1,7 @@
 # ECMAScript proposal: Types as Comments
 
+## _NOTE: This is a fork of https://github.com/giltayar/proposal-types-as-comments but I haven't updated all files. I'm just exploring alternate syntax for types._
+
 This proposal aims to enable developers to add type annotations to their JavaScript code, allowing those annotations to be checked by a type checker that is _external to JavaScript_.
 At runtime, a JavaScript engine ignores them, treating the types as comments.
 
@@ -18,6 +20,7 @@ The aim of this proposal is to enable developers to run programs written in [Typ
 - Romulo Cintra (Igalia)
 - Rob Palmer (Bloomberg)
 - ...and a number of contributors, see [history](https://github.com/giltayar/proposal-types-as-comments/commits/master).
+- Jethro Larson (this fork)
 
 **Champions:**
 
@@ -89,13 +92,21 @@ function stringsStringStrings(p1, p2, p3, p4) {
 }
 ```
 
-And here's the equivalent TypeScript syntax enabled by this proposal.
+And here's the equivalent TypeScript syntax.
 
 ```ts
 function stringsStringStrings(p1: string, p2?: string, p3?: string, p4 = "test"): string {
     // TODO
 }
 ```
+And here is the proposed equivalent
+```js
+:: (string, string, string?, string?) -> string
+function stringsStringStrings(p1, p2, p3, p4 = "test") {
+    // TODO
+}
+```
+
 
 JSDoc comments are typically more verbose.
 On top of this, JSDoc comments only provide a subset of the feature set supported in TypeScript,
@@ -103,8 +114,7 @@ in part because it's difficult to provide expressive syntax within JSDoc comment
 
 Nevertheless, the JSDoc-based syntax remains useful, and the need for some form of type annotations in JavaScript was significant enough for the TypeScript team to invest in it.
 
-For these reasons, the goal of this proposal is to allow a very large subset of TypeScript
-syntax to appear as-is in JavaScript source files, interpreted as comments.
+For these reasons, the goal of this proposal is to capture the benefits of TypeScript's structural type system and JSDoc's nice separation of types and terms and bring that to JS in an unobtrusive way that can be interpreted as commments.
 
 ## Proposal
 
@@ -113,26 +123,28 @@ syntax to appear as-is in JavaScript source files, interpreted as comments.
 ### Type Annotations
 
 Type annotations allow a developer to explicitly state what type a variable or expression is intended to be.
-Annotations follow the name or binding pattern of a declaration.
-They start with a `:` and are followed by the actual type.
+Annotations precede the definition of a value prefixed with the `::` digraph and are followed by the actual type. The JS runtime can treat `::` just like a comment, ignoring all the type metadata.
 
-```ts
-let x: string;
+```js
+::string?
+let x;
 
 x = "hello";
 
 x = 100;
 ```
+Author's note: Should mutable variables have a special type like "mut string?"
 
-In the example above, `x` is annotated with the type `string`.
+In the example above, `x` is annotated with the type `string?`.
 Tools such as TypeScript can utilize that type, and might choose to error on the statement `x = 100`;
 however, a JavaScript engine that follows this proposal would execute every line here without error.
 This is because annotations do not change the semantics of a program, and are equivalent to comments.
 
-Annotations can also be placed on parameters to specify the types that they accept, and following the end of a parameter list to specify the return type of a function.
+Annotations can also be applied to functions to specify the types of their parameters and return.
 
-```ts
-function equals(x: number, y: number): boolean {
+```js
+:: (number, number) -> boolean
+function equals(x, y) {
     return x === y;
 }
 ```
@@ -141,26 +153,84 @@ Here we have specified `number` for each parameter type, and `boolean` for the r
 
 ### Type Declarations
 
-Much of the time, developers need to create new names for types so that they can be easily referenced without repetition and so that they can be declared recursively.
+Much of the time, developers need to create new names for types so that they can be easily referenced without repetition.
 
-One way to declare a type - specifically an object type - is with an interface.
+```js
+::type Email = string;
+```
 
-```ts
-interface Person {
-    name: string;
-    age: number;
+This intraduces an alias that can be referenced in other type annotations.
+
+```js
+:: (Email, string) -> undefined
+const sendEmail = (emailAddress, message) => 
+```
+
+#### Record types
+One way to declare an object type - is with an record.
+
+```js
+::type Person = {
+::  name: string
+::  age: number
+::}
+```
+
+This defines a type of object that posses both a name property that is a string and an age property that is a number.
+
+```js
+:: Person
+const ada = {name: "Ada Lovelace", age: 36}
+```
+
+#### Union Types
+
+Very often in JS variables can be used to store values of a variety of types. For these cases a union type can be used which is a list of types separated by the `|` operator
+
+```js
+:: string | number
+let id = 0;
+```
+
+#### Literal Types
+
+When values can only be assigned a specific value it is useful to be able to use those values as types. This may be limited to strings, numbers, and boolean.
+
+```js
+:: (number, number) -> -1 | 1 | 0
+function sortNumberDescending(a, b){}
+
+:: ('hot' | 'not') -> 'cool' | 'not cool'
+const hotOrNot = (assessment) => assessment === 'not' ? 'cool' : 'not cool'
+```
+
+### Optional Type
+
+In JavaScript, variables are often declared before they are assigned. This leaves potential space where their value is `undefined`. To account for this case a type shorthand is proposed which is just sugar for  `T | undefined`.
+
+```js
+::number?
+let a;
+```
+
+This makes it clear that the intended type of `a` is string but may also have the value of `undefined` in the space between it's definition and assignment.
+
+This feature can also be used for defining the parameters of functions.
+
+```js
+::(string, string?) -> undefined
+function split(str, separator) {
+    // ...
 }
 ```
 
-Anything declared between the `{` and `}` of an `interface` is entirely ignored.
+### Tuples
 
-While `interface`s can extend other types in TypeScript, rules here are to be discussed.
+While JavaScript doesn't exactly have a tuple type the practice of using arrays as tuples is so common that it makes sense to have a type for them. Following TypeScript's lead here feels pretty natural.
 
-A type alias is another kind of declaration.
-It can declare a name for a broader set of types.
-
-```ts
-type CoolBool = boolean;
+```js
+::[string, number]
+const x = ['key', 1]
 ```
 
 ### Classes as Type Declarations
@@ -169,12 +239,15 @@ This proposal would allow class members, like property declarations and private 
 
 ```ts
 class Person {
-    name: string;
-    constructor(name: string) {
+    ::string
+    name;
+    ::(string) -> undefined
+    constructor(name) {
         this.name = name;
     }
 
-    getGreeting(): string {
+    :: () -> string
+    getGreeting() {
         return `Hello, my name is ${this.name}`;
     }
 }
@@ -206,30 +279,7 @@ This table is not comprehensive.
 
 The goal of this proposal is to find a reasonable set of syntactic rules to accommodate these constructs (and more) without prohibiting existing type systems from innovating in this space.
 
-The challenge with this is denoting the *end* of a type - this involves stating explicitly what tokens may and may not be part of a comment.
-An easy first step is to ensure that anything within matching parentheses and brackets (`(...)`, `[...]`, `{...}`, or `<...>`) can be immediately skipped.
-Going further is where things get harder.
-
-These rules have not yet been established, but will be explored in more detail upon advancement of this proposal.
-
-See also
-
-* [Allowed types](/syntax/grammar.md#allowed-types)
-* [Types under consideration](/syntax/grammar.md#types-under-consideration)
-* [Annotation type delimiters](/syntax/grammar.md#annotation-type-delimiters-and-allowed-types)
-
-### Parameter Optionality
-
-In JavaScript, parameters are technically "optional" - when arguments are omitted, and the parameters of a function will be assigned the value `undefined` upon invocation.
-This can be a source of errors, and it is useful signal whether or not a parameter is actually optional.
-
-To specify that a parameter is optional, the name of that parameter can be followed with a `?`.
-
-```ts
-function split(str: string, separator?: string) {
-    // ...
-}
-```
+Since the digraph `::` is before _every_ type annotation it is trivial to strip the annotations as they act just like the line-comment designator in JS `//`. This may seem like it limits types to only one line but if complex types like records deserve multiple lines then each can just be preceded by `::`. Unless a type annotation starts with `::type` type-checkers should assume that the annotation is for the next declaration defined the JS file.
 
 ### Importing and Exporting Types
 
@@ -238,34 +288,36 @@ As projects get bigger, code is split into modules, and sometimes a developer wi
 Types declarations can be exported by prefixing them with the `export` keyword.
 
 ```ts
-export type SpecialBool = boolean;
+::export type SpecialBool = boolean;
 
-export interface Person {
-    name: string;
-    age: number;
-}
+::export interface Person {
+::    name: string;
+::    age: number;
+::}
 ```
 
 Types can also be exported using an `export type` statement.
 
 ```ts
-export type { SomeLocalType };
+::export type { SomeLocalType };
 
-export type { SomeType as AnotherType } from "some-module";
+::export type { SomeType as AnotherType } from "some-module";
 ```
 
 Correspondingly, another module can use an `import type` statement to reference these types.
 
 ```ts
-import type { Person } from "schema";
+::import type { Person } from "schema";
 
-let person: Person;
+::Person
+let person;
 
 // or...
 
-import type * as schema from "schema";
+::import type * as schema from "schema";
 
-let person: schema.Person;
+::schema.Person
+let person;
 ```
 
 These `type`-specified declarations act as comments as well.
@@ -275,34 +327,20 @@ Instead, design-time tools would be free to statically analyze these declaration
 
 #### Type-Only Named Bindings
 
-Maintaining separate import statements for values and types can be cumbersome - especially when many modules export both types and values.
+Maintaining separate import statements for values and types can be cumbersome - especially when many modules export both types and values, however this is a trade-off we accept to keep the separation of types and terms crisp and easy to strip.
 
 ```ts
 import { parseSourceFile } from "./parser";
-import type { SourceFile } from "./parser";
+::import type { SourceFile } from "./parser";
 
-// ...
-
-let file: SourceFile;
+:: SourceFile?
+let file;
 try {
     file = parseSourceFile(filePath);
 }
 catch {
     // ...
 }
-```
-
-To support `import` or `export` statements containing both type and value bindings, a user can express which bindings are type-only by prefixing them with the `type` keyword.
-
-```ts
-import { parseSourceFile, type SourceFile } from "./parser";
-```
-
-A major difference with the above is that such imports are retained even if all bindings are declared type-only.
-
-```ts
-// This still imports "./parser" at runtime.
-import { type SourceFile } from "./parser";
 ```
  
 ### Type Assertions
@@ -311,27 +349,13 @@ Type systems do not have perfect information about the runtime type of an expres
 In some cases, they will need be informed of a more-appropriate type at a given position.
 Type assertions - sometimes called casts - are a means of asserting an expression's static type.
 
-```ts
-const point = JSON.parse(serializedPoint) as ({ x: number, y: number });
+```js
+::!{ x: number, y: number }
+const point = JSON.parse(serializedPoint);
 ```
 
 The term "type assertion" was chosen in TypeScript to distance from the idea of a "cast" which often has runtime implications.
 In contrast, type assertions have no runtime behavior.
-
-#### Non-Nullable Assertions
-
-One of the most common type-assertions in TypeScript is the non-null assertion operator.
-It convinces the type-checker that a value is neither `null` nor `undefined`.
-For example, one can write `x!.foo` to specify that `x` cannot be `null` nor `undefined`.
-
-```ts
-// assert that we have a valid 'HTMLElement', not 'HTMLElement | null'
-document.getElementById("entry")!.innerText = "...";
-```
-
-In TypeScript, the non-null assertion operator has no runtime semantics, and this proposal would specify it similarly;
-however, there is a case for adding non-nullable assertions as a runtime operator instead.
-If a runtime operator is preferred, that would likely become an independent proposal.
 
 ### Generics
 
@@ -345,24 +369,28 @@ Like everything else in this proposal, generics have no runtime behavior and wou
 Generic type parameters can appear on `type` and `interface` declarations.
 They must start with a `<` after the identifier and end with a `>`:
 
-```ts
-type Foo<T> = T[]
+```js
+::type Foo<T> = Array<T>
 
-interface Bar<T> {
-    x: T;
-}
+::type Bar<T> {
+::    x: T;
+::}
 ```
 
 Functions and classes can also have type parameters, though variables and parameters cannot.
 
-```ts
-function foo<T>(x: T) {
+```js
+::<T>(T) -> T
+function foo(x) {
     return x;
 }
 
-class Box<T> {
-    value: T;
-    constructor(value: T) {
+::<T>
+class Box {
+    ::T
+    value;
+    ::(T) -> undefined
+    constructor(value) {
         this.value = value;
     }
 }
@@ -372,44 +400,40 @@ class Box<T> {
 
 One can explicitly specify the type arguments of a generic function invocation or generic class instantiation [in TypeScript](https://www.typescriptlang.org/docs/handbook/2/functions.html#specifying-type-arguments).
 
-```ts
-// TypeScript
-add<number>(4, 5)
-new Point<bigint>(4n, 5n)
+```js
+::Point<bigint>
+const p = new Point(4n, 5n)
 ```
 
-The above syntax is already valid JavaScript that users may rely on, so we cannot use this syntax as-is.
-We expect some form of new syntax could be used to resolve this ambiguity.
-No specific solution is proposed at this point of time, but one example option is to use a syntactic prefix such as `::`
+### Typing `this`
+
+A function may operate on a bound context (`this`). When we want to define the type of `this` we can do so by preceding the lambda type with a fat-arrow.
 
 ```ts
-// Types as Comments - example syntax solution
-add::<number>(4, 5)
-new Point::<bigint>(4n, 5n)
-```
-
-These type arguments (`::<type>`) would be ignored by the JavaScript runtime.
-It would be reasonable for this non-ambiguous syntax to adopted in TypeScript as well.
-
-### `this` Parameters
-
-A function can have a parameter named `this` as the first parameter, and this parameter (and its type) is ignored by the runtime.
-It has no effect on the `length` property of the function, and does not impact values like `arguments`.
-
-```ts
-function sum(this: SomeType, x: number, y: number) {
-    // ...
+::SomeType => (number, number) -> undefined
+function sum(x, y) {
+    // ... this has type = SomeType
 }
 ```
 
-It would be expected that using a `this` parameter in an arrow function would either be disallowed by the grammar, or trigger an early error.
+You can think of the fat-arrow as asserting that the proceeding function is bound to it. 
+
+
+## Comparison to the original proposal
+This proposal aims to separate types and terms in a way that enables comfortable use of generics, currying, and higher-order functions in a way that languages struggle with. Here is an illustrative example from TypeScript.
 
 ```ts
-// Error!
-const oops = (this: SomeType) => {
-    // ...
-};
+const compose = <A, B, C>(g: (y: B) => C) => (f: (x: A) => B) => (a: A): C => g(f(a));
 ```
+Even though this is a simple function that is known as compose operator or the B combinator, due to the verbosity and complection of types and terms it is visually hard to process. Following this proposal would make it look like:
+
+```js
+::<A, B, C>(B -> C) -> (A -> B) -> A -> C
+const compose = (g,f) => a => g(f(a))
+```
+This makes it easy to study the actual code or the type independently to understand them without getting types and terms mixed up in your head.
+
+# End of Forked Proposal
 
 ## Intentional Omissions
 
